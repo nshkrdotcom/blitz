@@ -36,7 +36,7 @@ defmodule Blitz.MixProject do
       licenses: ["MIT"],
       maintainers: ["nshkrdotcom"],
       links: %{"GitHub" => "https://github.com/nshkrdotcom/blitz"},
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib assets mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
