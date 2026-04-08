@@ -34,6 +34,7 @@ defmodule BlitzTest do
 
   test "returns a structured error when commands fail" do
     elixir = System.find_executable("elixir")
+    cwd = System.tmp_dir!()
 
     commands = [
       Blitz.command(
@@ -44,14 +45,32 @@ defmodule BlitzTest do
       Blitz.command(
         id: "boom",
         command: elixir,
-        args: ["-e", ~s|IO.puts("boom"); System.halt(3)|]
+        args: ["-e", ~s|IO.puts("first"); IO.puts("second"); System.halt(3)|],
+        cd: cwd
       )
     ]
 
     capture_io(fn ->
       assert {:error, %Error{} = error} = Blitz.run(commands, max_concurrency: 2)
-      assert Enum.map(error.failures, &{&1.id, &1.exit_code}) == [{"boom", 3}]
-      assert Exception.message(error) =~ "boom: exit code 3"
+      assert [failure] = error.failures
+      assert failure.id == "boom"
+      assert failure.command == elixir
+      assert failure.cd == cwd
+      assert failure.exit_code == 3
+      assert failure.failure_kind == :exit
+      assert failure.duration_ms >= 0
+      assert failure.output_tail == ["first", "second"]
+
+      message = Exception.message(error)
+      assert message =~ "parallel command run failed:"
+      assert message =~ "\n\n  boom\n"
+      assert message =~ "exit: 3"
+      assert message =~ "cwd: #{cwd}"
+      assert message =~ "cmd: #{elixir}"
+      assert message =~ "duration: "
+      assert message =~ "output tail:"
+      assert message =~ "first"
+      assert message =~ "second"
     end)
   end
 
@@ -65,8 +84,72 @@ defmodule BlitzTest do
         args: ["-e", ~s|System.halt(4)|]
       )
 
-    assert_raise Error, "parallel command run failed:\n  boom: exit code 4", fn ->
-      capture_io(fn -> Blitz.run!([command]) end)
-    end
+    error =
+      assert_raise Error, fn ->
+        capture_io(fn -> Blitz.run!([command]) end)
+      end
+
+    assert Exception.message(error) =~ "parallel command run failed:"
+    assert Exception.message(error) =~ "exit: 4"
+    assert Exception.message(error) =~ "cmd: #{elixir}"
+  end
+
+  test "keeps only a bounded output tail for failures" do
+    elixir = System.find_executable("elixir")
+
+    command =
+      Blitz.command(
+        id: "tail",
+        command: elixir,
+        args: [
+          "-e",
+          ~S"""
+          Enum.each(1..60, fn number -> IO.puts("line #{number}") end)
+          System.halt(9)
+          """
+        ]
+      )
+
+    capture_io(fn ->
+      assert {:error, %Error{} = error} = Blitz.run([command], announce?: false)
+      assert [failure] = error.failures
+      assert failure.failure_kind == :exit
+      assert failure.exit_code == 9
+      assert length(failure.output_tail) == 50
+      assert hd(failure.output_tail) == "line 11"
+      assert List.last(failure.output_tail) == "line 60"
+
+      message = Exception.message(error)
+      refute message =~ "line 10"
+      assert message =~ "line 11"
+      assert message =~ "line 60"
+    end)
+  end
+
+  test "reports timed out workers distinctly from command exits" do
+    bash = System.find_executable("bash")
+
+    command =
+      Blitz.command(
+        id: "sleepy",
+        command: bash,
+        args: ["-lc", "echo starting; sleep 1"]
+      )
+
+    capture_io(fn ->
+      assert {:error, %Error{} = error} = Blitz.run([command], announce?: false, timeout: 50)
+      assert [failure] = error.failures
+      assert failure.failure_kind == :timeout
+      assert failure.exit_code == nil
+      assert failure.duration_ms >= 0
+      assert failure.output_tail == ["starting"]
+
+      message = Exception.message(error)
+      assert message =~ "parallel command run failed:"
+      assert message =~ "failure: timed out"
+      assert message =~ "cmd: #{bash}"
+      assert message =~ "reason: timeout after 50ms"
+      assert message =~ "starting"
+    end)
   end
 end

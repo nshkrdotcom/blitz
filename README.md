@@ -26,7 +26,9 @@ workflow engine, or distributed scheduler.
 - Runs isolated OS commands concurrently with `Task.async_stream/3`
 - Prefixes streamed output with a stable `id | ...` label
 - Preserves input ordering in the returned result list
-- Raises with aggregated failure details in `run!/2`
+- Keeps a bounded per-command output tail for post-failure summaries
+- Raises with actionable aggregated failure details in `run!/2`
+- Distinguishes normal exits, startup errors, timeouts, and worker crashes
 - Accepts per-command working directories and environment overrides
 - Ships a reusable `Blitz.MixWorkspace` layer for Mix monorepos
 - Supports config-driven parallelism with task weights, auto machine scaling,
@@ -42,7 +44,7 @@ Default install:
 ```elixir
 def deps do
   [
-    {:blitz, "~> 0.1.0"}
+    {:blitz, "~> 0.2.0"}
   ]
 end
 ```
@@ -55,7 +57,7 @@ helpers:
 ```elixir
 def deps do
   [
-    {:blitz, "~> 0.1.0", runtime: false}
+    {:blitz, "~> 0.2.0", runtime: false}
   ]
 end
 ```
@@ -95,7 +97,7 @@ Example:
 def project do
   [
     app: :my_workspace,
-    version: "0.1.0",
+    version: "0.2.0",
     deps: deps(),
     dialyzer: dialyzer()
   ]
@@ -103,7 +105,7 @@ end
 
 defp deps do
   [
-    {:blitz, "~> 0.1.0", runtime: false}
+    {:blitz, "~> 0.2.0", runtime: false}
   ]
 end
 
@@ -140,7 +142,7 @@ Blitz.run!(commands, max_concurrency: 2)
 ```
 
 Each command streams output with a stable `id | ...` prefix and `run!/2` raises
-with an aggregated failure summary if any command exits non-zero.
+with an actionable failure summary if any command fails.
 
 ## Mix Workspaces
 
@@ -160,7 +162,7 @@ Configure it in your root `mix.exs`:
 def project do
   [
     app: :my_workspace,
-    version: "0.1.0",
+    version: "0.2.0",
     deps: deps(),
     aliases: aliases(),
     blitz_workspace: blitz_workspace()
@@ -211,7 +213,7 @@ output such as the normal ExUnit colors from `mix test`.
 For tooling-root workspaces, the most common dependency shape is:
 
 ```elixir
-{:blitz, "~> 0.1.0", runtime: false}
+{:blitz, "~> 0.2.0", runtime: false}
 ```
 
 If that project also keeps a narrow Dialyzer PLT, add `:blitz` to
@@ -500,7 +502,8 @@ command =
 - `:max_concurrency` - defaults to `System.schedulers_online()`
 - `:announce?` - prints start and completion lines when `true`
 - `:prefix_output?` - prefixes command output lines when `true`
-- `:timeout` - per-task timeout passed to `Task.async_stream/3`
+- `:timeout` - per-task timeout passed to `Task.async_stream/3`; timed-out
+  tasks are killed and reported as structured timeout failures
 
 ## Return Values
 
@@ -526,9 +529,25 @@ Each `Blitz.Result` contains:
 - `cd`
 - `exit_code`
 - `duration_ms`
+- `output_tail`
+- `failure_kind`
+- `failure_reason`
 
 Results are returned in the same order as the input command list even though the
 commands themselves run concurrently.
+
+`output_tail` keeps the last 50 rendered lines for that command without storing
+the full log in memory.
+
+`failure_kind` is `nil` for success and one of:
+
+- `:exit`
+- `:startup_error`
+- `:timeout`
+- `:worker_crash`
+
+`exit_code` is only set for normal process exits. The other failure kinds carry
+their detail in `failure_reason`.
 
 ## Failure Handling
 
@@ -550,6 +569,22 @@ Use `run!/2` when failure should stop execution immediately:
 Blitz.run!(commands, max_concurrency: 4, timeout: 30_000)
 ```
 
+Example raised message:
+
+```text
+parallel command run failed:
+
+  core/dispatch_runtime
+    exit: 1
+    cwd: /repo/core/dispatch_runtime
+    cmd: mix compile --warnings-as-errors
+    duration: 2143ms
+    output tail:
+      ** (Mix) Can't continue due to errors on dependencies
+      Dependencies have diverged:
+      * libgraph ...
+```
+
 ## Typical Use Cases
 
 - Running `mix test` across multiple umbrella children or sibling repos
@@ -560,8 +595,10 @@ Blitz.run!(commands, max_concurrency: 4, timeout: 30_000)
 ## Design Notes
 
 - Output is streamed as commands run instead of buffered until completion
-- Failures are aggregated into a single `Blitz.Error` structure
-- Missing executables or command launch errors are treated as failures
+- Failures are aggregated into a single `Blitz.Error` structure with bounded
+  excerpts for each failing command
+- Missing executables, timeouts, and worker crashes are reported distinctly
+  from normal non-zero exits
 - Per-command `cd` and `env` values keep tasks isolated from each other
 - `Blitz.MixWorkspace` keeps repo-specific policy in `mix.exs`, not in bespoke
   runner modules
