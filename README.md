@@ -34,6 +34,13 @@ workflow engine, or distributed scheduler.
 - Supports config-driven parallelism with task weights, auto machine scaling,
   optional pinned multipliers, and per-task overrides
 - Keeps child projects isolated with per-project deps/build/lockfile/Hex paths
+- Persists impact-aware task state so unchanged exact states can be skipped
+- Plans workspace CI from git changes, project fingerprints, dependency state,
+  command state, and previously passed results
+- Labels impact decisions with exact-state, clean-baseline, impacted, forced, or
+  missing-baseline coverage sources
+- Keeps the default test-state store compact and prunes stale local artifacts
+- Reuses one workspace snapshot for multi-stage impact CI pipelines
 
 ## Installation
 
@@ -44,7 +51,7 @@ Default install:
 ```elixir
 def deps do
   [
-    {:blitz, "~> 0.2.0"}
+    {:blitz, "~> 0.3.0"}
   ]
 end
 ```
@@ -57,7 +64,7 @@ helpers:
 ```elixir
 def deps do
   [
-    {:blitz, "~> 0.2.0", runtime: false}
+    {:blitz, "~> 0.3.0", runtime: false}
   ]
 end
 ```
@@ -97,7 +104,7 @@ Example:
 def project do
   [
     app: :my_workspace,
-    version: "0.2.0",
+    version: "0.3.0",
     deps: deps(),
     dialyzer: dialyzer()
   ]
@@ -105,7 +112,7 @@ end
 
 defp deps do
   [
-    {:blitz, "~> 0.2.0", runtime: false}
+    {:blitz, "~> 0.3.0", runtime: false}
   ]
 end
 
@@ -162,7 +169,7 @@ Configure it in your root `mix.exs`:
 def project do
   [
     app: :my_workspace,
-    version: "0.2.0",
+    version: "0.3.0",
     deps: deps(),
     aliases: aliases(),
     blitz_workspace: blitz_workspace()
@@ -213,11 +220,71 @@ output such as the normal ExUnit colors from `mix test`.
 For tooling-root workspaces, the most common dependency shape is:
 
 ```elixir
-{:blitz, "~> 0.2.0", runtime: false}
+{:blitz, "~> 0.3.0", runtime: false}
 ```
 
 If that project also keeps a narrow Dialyzer PLT, add `:blitz` to
 `plt_add_apps` as shown in the installation section above.
+
+## Impact-Aware CI
+
+`Blitz.MixWorkspace.Impact` adds a deterministic test-state layer on top of the
+normal workspace planner. It fingerprints each project, local dependency edges,
+`mix.lock` content, the command/environment, workspace configuration, Elixir/OTP,
+and the Blitz version. A command is skipped when that exact task state has a
+latest passed result, or when a dirty workspace change does not impact that
+project/task and the current state is covered by the latest clean baseline.
+
+Persisted state defaults to:
+
+```text
+.blitz/test_state_v1
+```
+
+Set `BLITZ_TEST_STATE_DIR` or pass `--store-dir` when CI should read/write a
+shared cache volume. The default store is compact: it keeps exact task-state
+indexes, a current clean baseline, and clean-pipeline manifests. It prunes stale
+local artifacts after successful multi-stage runs.
+
+Use audit retention only when you need append-only result streams:
+
+```bash
+BLITZ_TEST_STATE_RETENTION=audit mix blitz.workspace.impact test
+```
+
+Run a dry plan:
+
+```bash
+mix blitz.workspace.impact test --dry-run
+mix blitz.workspace.impact compile --base main --head HEAD
+mix blitz.workspace.impact docs --force
+mix blitz.test_state.prune
+```
+
+Task-specific arguments should be passed after `--`:
+
+```bash
+mix blitz.workspace.impact test --dry-run -- --seed 0
+```
+
+Impact-aware execution is memoization of verified task states, not a build cache.
+If the project files, dependency state, lockfile content, command, environment,
+workspace configuration, configured workspace invalidator files, Elixir/OTP, or
+Blitz version changes, the task state changes and the command runs again unless
+that exact state has already passed.
+For multi-stage callers using `Blitz.MixWorkspace.Impact.run_many!/3`, a clean
+workspace writes a clean baseline ledger and can also skip from a pipeline
+manifest before rebuilding every project fingerprint. Dirty workspaces use the
+baseline ledger plus the current git diff to avoid rerunning unimpacted
+project/task pairs. Decision records expose whether a skip came from an exact
+passed task state or the clean baseline, so downstream tests can assert the
+first dirty run without parsing terminal text.
+
+See the guides for the full design:
+
+- [Impact CI](guides/impact_ci.md)
+- [Test State](guides/test_state.md)
+- [Downstream Integration](guides/downstream_integration.md)
 
 ## Parallelism Model
 

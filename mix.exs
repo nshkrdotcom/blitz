@@ -4,7 +4,7 @@ defmodule Blitz.MixProject do
   def project do
     [
       app: :blitz,
-      version: "0.2.0",
+      version: "0.3.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       preferred_cli_env: preferred_cli_env(),
@@ -36,7 +36,7 @@ defmodule Blitz.MixProject do
       licenses: ["MIT"],
       maintainers: ["nshkrdotcom"],
       links: %{"GitHub" => "https://github.com/nshkrdotcom/blitz"},
-      files: ~w(lib assets mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib assets guides mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
@@ -49,10 +49,14 @@ defmodule Blitz.MixProject do
       assets: %{"assets" => "assets"},
       extras: [
         "README.md": [title: "Overview"],
+        "guides/impact_ci.md": [title: "Impact CI"],
+        "guides/test_state.md": [title: "Test State"],
+        "guides/downstream_integration.md": [title: "Downstream Integration"],
         "CHANGELOG.md": [title: "Changelog"],
         LICENSE: [title: "License"]
       ],
       groups_for_extras: [
+        Guides: ~r/guides\/.*/,
         "Project Documents": ~r/README.md|CHANGELOG.md|LICENSE/
       ]
     ]

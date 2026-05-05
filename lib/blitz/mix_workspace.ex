@@ -47,7 +47,6 @@ defmodule Blitz.MixWorkspace do
   @doc """
   Loads and normalizes workspace configuration from the current Mix project.
   """
-  @spec load!(keyword()) :: map()
   def load!(project_config \\ Mix.Project.config()) do
     project_config
     |> extract_workspace_config!()
