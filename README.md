@@ -188,7 +188,6 @@ defp blitz_workspace do
     root: __DIR__,
     projects: [".", "apps/*", "libs/*"],
     parallelism: [
-      env: "MY_WORKSPACE_MAX_CONCURRENCY",
       base: [deps_get: 3, format: 4, compile: 2, test: 2],
       multiplier: :auto,
       overrides: [dialyzer: 1]
@@ -241,15 +240,15 @@ Persisted state defaults to:
 .blitz/test_state_v1
 ```
 
-Set `BLITZ_TEST_STATE_DIR` or pass `--store-dir` when CI should read/write a
-shared cache volume. The default store is compact: it keeps exact task-state
-indexes, a current clean baseline, and clean-pipeline manifests. It prunes stale
-local artifacts after successful multi-stage runs.
+Pass `--store-dir` when CI should read/write a shared cache volume. The default
+store is compact: it keeps exact task-state indexes, a current clean baseline,
+and clean-pipeline manifests. It prunes stale local artifacts after successful
+multi-stage runs.
 
 Use audit retention only when you need append-only result streams:
 
 ```bash
-BLITZ_TEST_STATE_RETENTION=audit mix blitz.workspace.impact test
+mix blitz.workspace.impact test --retention audit
 ```
 
 Run a dry plan:
@@ -302,7 +301,7 @@ Each workspace task gets one effective `max_concurrency` value. Resolution
 order is:
 
 1. `-j N` or `--max-concurrency N` on the current invocation
-2. the configured environment override from `parallelism.env`
+2. the explicit workspace override from `parallelism.max_concurrency`
 3. the per-task value in `parallelism.overrides`
 4. `round(base * resolved_multiplier)` from `parallelism.base` and
    `parallelism.multiplier`
@@ -316,7 +315,7 @@ resolved_multiplier =
 
 effective(task) =
   cli_override
-  || env_override
+  || workspace_max_concurrency
   || per_task_override
   || round(base[task] * resolved_multiplier)
   || 1
@@ -337,7 +336,7 @@ Example with a pinned multiplier:
 
 ```elixir
 parallelism: [
-  env: "MY_WORKSPACE_MAX_CONCURRENCY",
+  max_concurrency: nil,
   multiplier: 2,
   base: [
     deps_get: 3,
@@ -367,7 +366,7 @@ docs     = 2
 Then:
 
 - `mix blitz.workspace test` uses `4`
-- `MY_WORKSPACE_MAX_CONCURRENCY=10 mix blitz.workspace test` uses `10`
+- `parallelism.max_concurrency: 10` uses `10`
 - `mix blitz.workspace test -j 12` uses `12`
 
 Example with auto mode:
@@ -433,7 +432,7 @@ Task config keys:
 - `args` is the child `mix` argv list, such as `["test"]` or
   `["compile", "--warnings-as-errors"]`.
 - `mix_env` selects the isolated build-path suffix used for the task. Use
-  `:inherit` to derive it from the current `MIX_ENV` or fall back to `dev`.
+  `:inherit` to derive it from the current `Mix.env()`.
 - `color: true` injects `--color` unless `--color` or `--no-color` is already
   present in the extra args.
 - `preflight?` controls whether the task first runs `deps.get` for projects that
@@ -511,21 +510,23 @@ blitz_workspace: [
 ]
 ```
 
-To override concurrency from the shell without changing `mix.exs`, set
-`parallelism.env`:
+To pin workspace concurrency without changing task weights, set
+`parallelism.max_concurrency` or pass `-j`/`--max-concurrency` on the command
+line:
 
 ```elixir
 parallelism: [
   base: [test: 2, compile: 2],
   multiplier: :auto,
-  env: "BLITZ_MAX_CONCURRENCY"
+  max_concurrency: 8
 ]
 ```
 
 Then run with:
 
 ```bash
-BLITZ_MAX_CONCURRENCY=8 mix blitz.workspace test
+mix blitz.workspace test
+mix blitz.workspace test -j 12
 ```
 
 ## Example Output

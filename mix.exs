@@ -1,3 +1,7 @@
+unless Code.ensure_loaded?(DependencySources) do
+  Code.require_file("build_support/dependency_sources.exs", __DIR__)
+end
+
 defmodule Blitz.MixProject do
   use Mix.Project
 
@@ -36,7 +40,7 @@ defmodule Blitz.MixProject do
       licenses: ["MIT"],
       maintainers: ["nshkrdotcom"],
       links: %{"GitHub" => "https://github.com/nshkrdotcom/blitz"},
-      files: ~w(lib assets guides mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib assets build_support guides mix.exs README.md LICENSE CHANGELOG.md AGENTS.md)
     ]
   end
 

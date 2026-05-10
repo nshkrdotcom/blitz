@@ -11,6 +11,7 @@ defmodule Blitz.MixWorkspace do
 
   - `base` config describes task weight
   - `multiplier` describes machine size
+  - `max_concurrency` explicitly pins all workspace tasks
   - `:auto` multiplier mode scales from local schedulers and memory
   - per-task overrides and CLI `-j` still take precedence when present
   """
@@ -37,7 +38,7 @@ defmodule Blitz.MixWorkspace do
 
   @default_parallelism %{
     base: %{},
-    env: nil,
+    max_concurrency: nil,
     multiplier: :auto,
     overrides: %{}
   }
@@ -142,7 +143,8 @@ defmodule Blitz.MixWorkspace do
   def max_concurrency(workspace_config, task, runner_override \\ nil) do
     workspace = normalize_workspace!(workspace_config)
 
-    runner_override || env_override(workspace) || configured_concurrency(workspace, task)
+    runner_override || workspace_max_concurrency(workspace) ||
+      configured_concurrency(workspace, task)
   end
 
   @doc """
@@ -389,10 +391,11 @@ defmodule Blitz.MixWorkspace do
         config
         |> get_config_value(:base, @default_parallelism.base)
         |> normalize_positive_integer_map(),
-      env:
+      max_concurrency:
         config
-        |> get_config_value(:env, @default_parallelism.env)
-        |> normalize_optional_string(),
+        |> reject_parallelism_env!()
+        |> get_config_value(:max_concurrency, @default_parallelism.max_concurrency)
+        |> normalize_optional_positive_integer!(:max_concurrency),
       multiplier:
         config
         |> get_config_value(:multiplier, @default_parallelism.multiplier)
@@ -416,8 +419,10 @@ defmodule Blitz.MixWorkspace do
     end)
   end
 
-  defp normalize_optional_string(nil), do: nil
-  defp normalize_optional_string(value), do: to_string(value)
+  defp normalize_optional_positive_integer!(nil, _name), do: nil
+
+  defp normalize_optional_positive_integer!(value, name),
+    do: normalize_positive_integer!(value, name)
 
   defp normalize_mix_env(nil), do: :inherit
   defp normalize_mix_env(:inherit), do: :inherit
@@ -585,20 +590,11 @@ defmodule Blitz.MixWorkspace do
     )
   end
 
-  defp task_mix_env(%{mix_env: :inherit}), do: System.get_env("MIX_ENV", "dev")
+  defp task_mix_env(%{mix_env: :inherit}), do: Mix.env() |> Atom.to_string()
   defp task_mix_env(%{mix_env: mix_env}), do: mix_env
 
-  defp env_override(workspace) do
-    case workspace.parallelism.env do
-      nil ->
-        nil
-
-      env_name ->
-        case System.get_env(env_name) do
-          nil -> nil
-          value -> parse_positive_integer!(value, env_name)
-        end
-    end
+  defp workspace_max_concurrency(workspace) do
+    workspace.parallelism.max_concurrency
   end
 
   defp configured_concurrency(workspace, task) do
@@ -745,6 +741,16 @@ defmodule Blitz.MixWorkspace do
 
   defp has_config_key?(config, key) when is_list(config), do: Keyword.has_key?(config, key)
   defp has_config_key?(config, key) when is_map(config), do: Map.has_key?(config, key)
+
+  defp reject_parallelism_env!(config) do
+    if has_config_key?(config, :env) do
+      Mix.raise(
+        "parallelism.env is no longer supported; pass -j/--max-concurrency or set :max_concurrency"
+      )
+    else
+      config
+    end
+  end
 
   defp get_config_value(config, key, default \\ :no_default)
 

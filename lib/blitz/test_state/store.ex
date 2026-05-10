@@ -11,12 +11,11 @@ defmodule Blitz.TestState.Store do
   def new(workspace_root, opts \\ []) do
     root =
       Keyword.get(opts, :store_dir) ||
-        System.get_env("BLITZ_TEST_STATE_DIR") ||
         Path.join([workspace_root, ".blitz", "test_state_v1"])
 
     retention =
       opts
-      |> Keyword.get(:retention, System.get_env("BLITZ_TEST_STATE_RETENTION", "compact"))
+      |> Keyword.get(:retention, :compact)
       |> normalize_retention()
 
     %__MODULE__{root: Path.expand(root), retention: retention}

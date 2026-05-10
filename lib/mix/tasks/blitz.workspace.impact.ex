@@ -10,6 +10,7 @@ defmodule Mix.Tasks.Blitz.Workspace.Impact do
 
       mix blitz.workspace.impact test --dry-run
       mix blitz.workspace.impact compile --base main --head HEAD
+      mix blitz.workspace.impact test --store-dir /tmp/blitz-test-state --retention audit
   """
 
   @shortdoc "Run a Blitz workspace task with impact-aware skipping"
@@ -24,7 +25,8 @@ defmodule Mix.Tasks.Blitz.Workspace.Impact do
           explain: :boolean,
           base: :string,
           head: :string,
-          store_dir: :string
+          store_dir: :string,
+          retention: :string
         ],
         aliases: [f: :force]
       )

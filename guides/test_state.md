@@ -1,7 +1,7 @@
 # Test State
 
-Blitz persists task-state evidence under `.blitz/test_state_v1` by default. Set
-`BLITZ_TEST_STATE_DIR` or pass `--store-dir` to place it on a CI cache volume.
+Blitz persists task-state evidence under `.blitz/test_state_v1` by default. Pass
+`--store-dir` to place it on a CI cache volume.
 
 The default store is intentionally compact:
 
@@ -25,7 +25,7 @@ has passed once.
 Append-only audit streams are opt-in:
 
 ```bash
-BLITZ_TEST_STATE_RETENTION=audit mix blitz.workspace.impact test
+mix blitz.workspace.impact test --retention audit
 ```
 
 Audit retention writes:

@@ -168,6 +168,54 @@ defmodule Blitz.MixWorkspaceTest do
     end)
   end
 
+  test "explicit workspace max_concurrency applies before task defaults" do
+    workspace =
+      workspace_config("/tmp/workspace",
+        parallelism: [
+          max_concurrency: 5,
+          base: [deps_get: 3, test: 2],
+          multiplier: 2,
+          overrides: [test: 9]
+        ]
+      )
+
+    assert MixWorkspace.max_concurrency(workspace, :test) == 5
+    assert MixWorkspace.max_concurrency(workspace, :test, 7) == 7
+  end
+
+  test "legacy parallelism env config is rejected" do
+    workspace =
+      workspace_config("/tmp/workspace",
+        parallelism: [
+          env: "BLITZ_MAX_CONCURRENCY",
+          base: [test: 2],
+          multiplier: 1
+        ]
+      )
+
+    assert_raise Mix.Error, ~r/parallelism\.env is no longer supported/, fn ->
+      MixWorkspace.max_concurrency(workspace, :test)
+    end
+  end
+
+  test "inherit mix_env uses current Mix env without reading OS env" do
+    with_tmp_workspace(fn root ->
+      create_mix_project!(root, "apps/demo")
+
+      workspace =
+        workspace_config(root,
+          tasks: [
+            deps_get: [args: ["deps.get"], preflight?: false],
+            compile: [args: ["compile"], mix_env: :inherit]
+          ]
+        )
+
+      env = MixWorkspace.command_env(workspace, "apps/demo", :compile) |> Map.new()
+
+      assert env["MIX_BUILD_PATH"] == Path.join([root, "apps/demo", "_build/test"])
+    end)
+  end
+
   test "runs mix test across the workspace with prefixed colored output" do
     with_tmp_workspace(fn root ->
       create_mix_project!(root, ".", tests?: true)

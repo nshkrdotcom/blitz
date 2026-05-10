@@ -96,6 +96,20 @@ defmodule Blitz.TestStateTest do
     end)
   end
 
+  test "store defaults ignore process env and use explicit options" do
+    with_tmp_workspace(fn root ->
+      store = Store.new(root)
+
+      audit_store =
+        Store.new(root, store_dir: Path.join(root, "custom_state"), retention: "audit")
+
+      assert store.root == Path.join(root, ".blitz/test_state_v1")
+      assert store.retention == :compact
+      assert audit_store.root == Path.join(root, "custom_state")
+      assert audit_store.retention == :audit
+    end)
+  end
+
   test "git metadata and file discovery ignore the blitz store" do
     with_tmp_workspace(fn root ->
       git!(root, ["init"])
