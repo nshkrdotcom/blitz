@@ -11,7 +11,6 @@ defmodule Blitz.MixProject do
       version: "0.3.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
-      preferred_cli_env: preferred_cli_env(),
       dialyzer: dialyzer(),
       deps: deps(),
       description: "Parallel command runner and Mix workspace orchestrator for Elixir tooling",
@@ -27,11 +26,15 @@ defmodule Blitz.MixProject do
     ]
   end
 
+  def cli do
+    [preferred_envs: preferred_cli_env()]
+  end
+
   defp deps do
     [
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
-      {:ex_doc, "~> 0.40.1", only: :dev, runtime: false}
+      {:credo, "~> 1.7.19", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4.7", only: [:dev], runtime: false},
+      {:ex_doc, "~> 0.40.3", only: :dev, runtime: false}
     ]
   end
 
