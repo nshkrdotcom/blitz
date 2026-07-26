@@ -59,6 +59,14 @@ Blitz.MixWorkspace.Impact.run_many!(
 )
 ```
 
+Do not use an impact-skippable `deps_get` result as the only bootstrap for a
+workspace command. Fetched dependency trees are disposable checkout state:
+they can be absent even when the dependency declaration and lockfile still
+match a previously passing task-state hash. A root alias that must be
+self-bootstrapping should run `blitz.workspace deps_get` unconditionally
+before its impact-aware pipeline. Impact-aware `deps_get` remains useful only
+after an independent bootstrap guarantee owns the physical dependency trees.
+
 Use `command_mapper` when the downstream repo wraps `mix` with a script, env
 shim, or another executable. Use `only_projects` when one CI stage must be split,
 such as package tests first and the root test suite last.
