@@ -15,7 +15,7 @@ end
 After the Blitz release is published, switch back to the Hex dependency:
 
 ```elixir
-{:blitz, "~> 0.3.0", runtime: false}
+{:blitz, "~> 0.4.0", runtime: false}
 ```
 
 ## Repo-Local `mix ci`

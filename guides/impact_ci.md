@@ -24,7 +24,10 @@ persists the result.
 Multi-stage callers should use `Blitz.MixWorkspace.Impact.run_many!/3`. It
 builds the workspace snapshot once, applies each requested task against that
 snapshot, and writes a clean baseline plus a clean-pipeline manifest after a
-successful clean run. A later identical clean run can skip from that manifest
+successful clean run. Execution is pipelined per project rather than
+barriered per task family: a project's `test` command can start as soon as
+that project's `compile` succeeded, while other projects are still
+compiling. Each task family still respects its own configured concurrency. A later identical clean run can skip from that manifest
 before project fingerprinting, which is the fastest path for repeated `mix ci`
 checks. Dirty runs use the clean baseline to skip unimpacted project/task pairs.
 

@@ -5,15 +5,20 @@ defmodule Blitz.MixWorkspace do
   Workspace configuration lives in the root project's `mix.exs` under the
   `:blitz_workspace` key. `Blitz.MixWorkspace` expands the configured project
   patterns, builds isolated child `mix` commands, and runs staged workspace
-  tasks through `Blitz`.
+  tasks through `Blitz.run_stages!/2` — stages pipeline per project instead of
+  forming barriers, so one project's task can start while other projects are
+  still on an earlier stage.
 
-  Parallelism stays workspace-owned:
+  Parallelism stays workspace-owned. Effective concurrency for a task resolves
+  in this order (first present value wins):
 
-  - `base` config describes task weight
-  - `multiplier` describes machine size
-  - `max_concurrency` explicitly pins all workspace tasks
-  - `:auto` multiplier mode scales from local schedulers and memory
-  - per-task overrides and CLI `-j` still take precedence when present
+  1. the CLI runner override (`-j`/`--max-concurrency`)
+  2. `max_concurrency`, which explicitly pins all workspace tasks
+  3. the per-task value in `overrides`
+  4. `round(base * multiplier)`, where `base` describes task weight and
+     `multiplier` describes machine size (`:auto` scales from local schedulers
+     and memory)
+  5. `1` when nothing is configured for the task
   """
 
   alias Blitz.Command
@@ -242,9 +247,7 @@ defmodule Blitz.MixWorkspace do
   def run!(workspace_config, task, args) do
     workspace_config
     |> plan(task, args)
-    |> Enum.each(fn stage ->
-      Blitz.run!(stage.commands, max_concurrency: stage.max_concurrency)
-    end)
+    |> Blitz.run_stages!()
 
     :ok
   end
@@ -313,6 +316,12 @@ defmodule Blitz.MixWorkspace do
         _ -> extract_workspace_config!(workspace_config)
       end
 
+    reject_unknown_config_keys!(
+      workspace_config,
+      [:root, :projects, :tasks, :isolation, :parallelism],
+      "workspace"
+    )
+
     %{
       root:
         workspace_config
@@ -351,6 +360,10 @@ defmodule Blitz.MixWorkspace do
       task_config =
         task_config
         |> normalize_nested_config()
+        |> reject_unknown_config_keys!(
+          [:args, :color, :env, :mix_env, :preflight?],
+          "tasks.#{task_name}"
+        )
         |> then(fn config ->
           %{
             args:
@@ -369,7 +382,13 @@ defmodule Blitz.MixWorkspace do
   end
 
   defp normalize_isolation(config) do
-    config = normalize_nested_config(config)
+    config =
+      config
+      |> normalize_nested_config()
+      |> reject_unknown_config_keys!(
+        [:deps_path, :build_path, :lockfile, :hex_home, :unset_env],
+        "isolation"
+      )
 
     %{
       deps_path: get_config_value(config, :deps_path, @default_isolation.deps_path),
@@ -384,7 +403,14 @@ defmodule Blitz.MixWorkspace do
   end
 
   defp normalize_parallelism(config) do
-    config = normalize_nested_config(config)
+    config =
+      config
+      |> normalize_nested_config()
+      |> reject_parallelism_env!()
+      |> reject_unknown_config_keys!(
+        [:base, :max_concurrency, :multiplier, :overrides],
+        "parallelism"
+      )
 
     %{
       base:
@@ -393,7 +419,6 @@ defmodule Blitz.MixWorkspace do
         |> normalize_positive_integer_map(),
       max_concurrency:
         config
-        |> reject_parallelism_env!()
         |> get_config_value(:max_concurrency, @default_parallelism.max_concurrency)
         |> normalize_optional_positive_integer!(:max_concurrency),
       multiplier:
@@ -741,6 +766,27 @@ defmodule Blitz.MixWorkspace do
 
   defp has_config_key?(config, key) when is_list(config), do: Keyword.has_key?(config, key)
   defp has_config_key?(config, key) when is_map(config), do: Map.has_key?(config, key)
+
+  defp reject_unknown_config_keys!(config, allowed_keys, context) do
+    unknown_keys = config_keys(config) -- allowed_keys
+
+    case unknown_keys do
+      [] ->
+        config
+
+      keys ->
+        label = if length(keys) == 1, do: "key", else: "keys"
+        rendered_keys = Enum.map_join(keys, ", ", &inspect/1)
+        supported = allowed_keys |> Enum.sort() |> Enum.join(", ")
+
+        Mix.raise(
+          "unknown #{context} config #{label} #{rendered_keys}. Supported keys: #{supported}"
+        )
+    end
+  end
+
+  defp config_keys(config) when is_list(config), do: config |> Keyword.keys() |> Enum.uniq()
+  defp config_keys(config) when is_map(config), do: Map.keys(config)
 
   defp reject_parallelism_env!(config) do
     if has_config_key?(config, :env) do

@@ -249,6 +249,52 @@ defmodule Blitz.TestStateTest do
     end)
   end
 
+  test "run_many overlaps task families across projects while keeping per-project order" do
+    with_tmp_workspace(fn root ->
+      create_mix_project!(root, ".")
+      create_mix_project!(root, "apps/alpha")
+      init_git!(root)
+
+      stamp_dir =
+        Path.join(System.tmp_dir!(), "blitz_overlap_#{System.unique_integer([:positive])}")
+
+      File.rm_rf!(stamp_dir)
+      File.mkdir_p!(stamp_dir)
+
+      workspace =
+        root
+        |> workspace_config()
+        |> Keyword.put(:parallelism, multiplier: 1, overrides: [compile: 2, test: 2, deps_get: 2])
+
+      mapper = fn %Command{} = command ->
+        task = task_name_from_args(command.args)
+        slug = task <> "_" <> String.replace(command.id, ~r/[^a-zA-Z0-9]+/, "_")
+        sleep = if task == "compile" and command.id == ".", do: "1", else: "0"
+
+        script =
+          "date +%s%N > #{stamp_dir}/#{slug}.start; sleep #{sleep}; " <>
+            "date +%s%N > #{stamp_dir}/#{slug}.end"
+
+        %Command{command | command: "bash", args: ["-c", script]}
+      end
+
+      try do
+        assert [%{selected: 2}, %{selected: 2}] =
+                 Impact.run_many!(workspace, [{:compile, []}, {:test, []}],
+                   command_mapper: mapper
+                 )
+
+        assert read_stamp(stamp_dir, "test_apps_alpha", :start) <
+                 read_stamp(stamp_dir, "compile__", :end)
+
+        assert read_stamp(stamp_dir, "test_apps_alpha", :start) >=
+                 read_stamp(stamp_dir, "compile_apps_alpha", :end)
+      after
+        File.rm_rf!(stamp_dir)
+      end
+    end)
+  end
+
   test "clean run writes a baseline ledger with project task entries" do
     with_tmp_workspace(fn root ->
       create_mix_project!(root, ".")
@@ -981,6 +1027,14 @@ defmodule Blitz.TestStateTest do
   defp task_name_from_args(["deps.get" | _rest]), do: "deps_get"
   defp task_name_from_args([task | _rest]), do: task
   defp task_name_from_args([]), do: "unknown"
+
+  defp read_stamp(dir, name, kind) do
+    dir
+    |> Path.join("#{name}.#{kind}")
+    |> File.read!()
+    |> String.trim()
+    |> String.to_integer()
+  end
 
   defp read_executions(log_path) do
     if File.exists?(log_path) do

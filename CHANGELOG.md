@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-30
+
+### Added
+- Added `parallelism.max_concurrency` as a supported workspace configuration
+  key that explicitly pins the effective concurrency of every workspace task.
+  Effective concurrency now resolves as CLI `-j`/`--max-concurrency`, then
+  `parallelism.max_concurrency`, then `parallelism.overrides`, then
+  `round(base * multiplier)`, then `1`.
+- Added `Blitz.run_stages/2` and `Blitz.run_stages!/2`: staged command
+  execution without barriers between stages. Commands form per-id pipelines —
+  a later-stage command starts once every same-id command in earlier stages
+  succeeded — while each stage keeps its own `max_concurrency` bound. A failure
+  blocks same-id downstream commands and stops new launches.
+
+### Changed
+- Changed `Blitz.MixWorkspace.run!/3` and the impact runners
+  (`Blitz.MixWorkspace.Impact.run!/4` and `run_many!/3`) to execute their
+  planned stages through `Blitz.run_stages`, so task families overlap per
+  project instead of forming workspace-wide barriers. A project's `test` can
+  start as soon as that project's `compile` succeeded while other projects are
+  still compiling; result persistence, summaries, and failure semantics are
+  unchanged.
+- Changed workspace configuration validation to reject unknown keys in
+  `blitz_workspace`, `parallelism`, `isolation`, and per-task configs with an
+  error listing the supported keys. Previously a misspelled key (for example
+  `parallelism.max_concurency`) was silently ignored and could degrade the
+  workspace to concurrency 1.
+
+### Removed
+- Removed `parallelism.env`. Configuring it now raises with a migration
+  message pointing at `-j`/`--max-concurrency` or
+  `parallelism.max_concurrency`.
+
+### Fixed
+- Fixed the `Blitz.MixWorkspace` moduledoc to state the real concurrency
+  resolution order; it previously claimed per-task overrides took precedence
+  over the workspace `max_concurrency` pin.
+
 ## [0.3.0] - 2026-05-05
 
 ### Added

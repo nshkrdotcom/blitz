@@ -18,7 +18,8 @@ defmodule Blitz.MixWorkspace.Impact do
   def run!(workspace_config, task, args \\ [], opts \\ []) when is_atom(task) do
     workspace_config
     |> plan(task, args, opts)
-    |> execute_plan!(opts)
+    |> then(&execute_plans!([&1], opts))
+    |> hd()
   end
 
   def run_many!(workspace_config, task_specs, opts \\ []) do
@@ -38,7 +39,7 @@ defmodule Blitz.MixWorkspace.Impact do
           plan_with_context(context, task, args, Keyword.merge(opts, task_opts))
         end)
 
-      summaries = Enum.map(plans, &execute_plan!(&1, opts))
+      summaries = execute_plans!(plans, opts)
       maybe_write_pipeline_manifest!(store, pipeline_hash, plans, summaries, opts, git)
       summaries
     end
@@ -146,48 +147,77 @@ defmodule Blitz.MixWorkspace.Impact do
     end
   end
 
-  defp execute_plan!(%{stages: stages} = plan, opts) do
+  defp execute_plans!(plans, opts) do
     if Keyword.get(opts, :dry_run, false) do
-      print_dry_run!(plan)
-      summary(plan)
+      Enum.map(plans, fn plan ->
+        print_dry_run!(plan)
+        summary(plan)
+      end)
     else
-      execute_selected!(plan, stages)
+      run_selected_plans!(plans)
     end
   end
 
-  defp execute_selected!(plan, stages) do
-    Store.ensure_store!(plan.store)
+  defp run_selected_plans!(plans) do
+    store = plans |> List.first() |> Map.fetch!(:store)
+    Store.ensure_store!(store)
 
-    executed = Enum.flat_map(stages, &execute_stage!(plan, &1))
+    {stage_inputs, stage_refs} = build_stage_inputs(plans)
 
-    Store.prune!(plan.store)
+    {run_error, grouped_results} =
+      case Blitz.run_stages(stage_inputs) do
+        {:ok, grouped} -> {nil, grouped}
+        {:error, error, grouped} -> {error, grouped}
+      end
 
-    plan
-    |> summary()
-    |> Map.put(:executed_results, executed)
-    |> tap(&print_summary!/1)
+    executed_by_plan = persist_stage_results!(plans, stage_refs, grouped_results)
+
+    if run_error, do: raise(run_error)
+
+    Store.prune!(store)
+
+    plans
+    |> Enum.with_index()
+    |> Enum.map(fn {plan, plan_index} ->
+      plan
+      |> summary()
+      |> Map.put(:executed_results, Map.get(executed_by_plan, plan_index, []))
+      |> tap(&print_summary!/1)
+    end)
   end
 
-  defp execute_stage!(plan, stage) do
-    stage.decisions
-    |> Enum.filter(&(&1.decision in [:run, :force_run]))
-    |> run_stage_decisions!(plan, stage)
+  defp build_stage_inputs(plans) do
+    plans
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {plan, plan_index} ->
+      Enum.flat_map(plan.stages, fn stage ->
+        case Enum.filter(stage.decisions, &(&1.decision in [:run, :force_run])) do
+          [] ->
+            []
+
+          selected ->
+            [
+              {%{
+                 commands: Enum.map(selected, & &1.command),
+                 max_concurrency: stage.max_concurrency
+               }, %{plan_index: plan_index, task: stage.task, decisions: selected}}
+            ]
+        end
+      end)
+    end)
+    |> Enum.unzip()
   end
 
-  defp run_stage_decisions!([], _plan, _stage), do: []
+  defp persist_stage_results!(plans, stage_refs, grouped_results) do
+    stage_refs
+    |> Enum.zip(grouped_results)
+    |> Enum.reduce(%{}, fn {stage_ref, results}, executed_by_plan ->
+      plan = Enum.at(plans, stage_ref.plan_index)
+      decision_by_id = Map.new(stage_ref.decisions, &{&1.command.id, &1})
+      persisted = persist_results!(plan, stage_ref.task, results, decision_by_id)
 
-  defp run_stage_decisions!(decisions, plan, stage) do
-    commands = Enum.map(decisions, & &1.command)
-    decision_by_id = Map.new(decisions, &{&1.command.id, &1})
-
-    case Blitz.run(commands, max_concurrency: stage.max_concurrency) do
-      {:ok, results} ->
-        persist_results!(plan, stage.task, results, decision_by_id)
-
-      {:error, error} ->
-        persist_results!(plan, stage.task, error.results, decision_by_id)
-        raise error
-    end
+      Map.update(executed_by_plan, stage_ref.plan_index, persisted, &(&1 ++ persisted))
+    end)
   end
 
   defp decision(

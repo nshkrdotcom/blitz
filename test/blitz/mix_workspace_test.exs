@@ -198,6 +198,75 @@ defmodule Blitz.MixWorkspaceTest do
     end
   end
 
+  test "unknown parallelism config keys are rejected" do
+    workspace =
+      workspace_config("/tmp/workspace",
+        parallelism: [
+          max_concurency: 8,
+          base: [test: 2],
+          multiplier: 1
+        ]
+      )
+
+    error =
+      assert_raise Mix.Error, fn ->
+        MixWorkspace.max_concurrency(workspace, :test)
+      end
+
+    assert error.message =~ "unknown parallelism config key :max_concurency"
+    assert error.message =~ "base, max_concurrency, multiplier, overrides"
+  end
+
+  test "unknown isolation config keys are rejected" do
+    workspace =
+      workspace_config("/tmp/workspace",
+        isolation: [deps_pathz: false]
+      )
+
+    error =
+      assert_raise Mix.Error, fn ->
+        MixWorkspace.max_concurrency(workspace, :test)
+      end
+
+    assert error.message =~ "unknown isolation config key :deps_pathz"
+    assert error.message =~ "build_path, deps_path, hex_home, lockfile, unset_env"
+  end
+
+  test "unknown task config keys are rejected" do
+    workspace =
+      workspace_config("/tmp/workspace",
+        tasks: [
+          test: [argz: ["test"]]
+        ]
+      )
+
+    error =
+      assert_raise Mix.Error, fn ->
+        MixWorkspace.max_concurrency(workspace, :test)
+      end
+
+    assert error.message =~ "unknown tasks.test config key :argz"
+    assert error.message =~ "args, color, env, mix_env, preflight?"
+  end
+
+  test "unknown top-level workspace config keys are rejected" do
+    workspace = workspace_config("/tmp/workspace") ++ [paralelism: []]
+
+    error =
+      assert_raise Mix.Error, fn ->
+        MixWorkspace.max_concurrency(workspace, :test)
+      end
+
+    assert error.message =~ "unknown workspace config key :paralelism"
+    assert error.message =~ "isolation, parallelism, projects, root, tasks"
+  end
+
+  test "normalized workspace maps stay accepted on re-entry" do
+    workspace = MixWorkspace.load!(blitz_workspace: workspace_config("/tmp/workspace"))
+
+    assert MixWorkspace.max_concurrency(workspace, :test) == 4
+  end
+
   test "inherit mix_env uses current Mix env without reading OS env" do
     with_tmp_workspace(fn root ->
       create_mix_project!(root, "apps/demo")

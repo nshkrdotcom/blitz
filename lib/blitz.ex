@@ -16,6 +16,15 @@ defmodule Blitz do
           | {:max_concurrency, pos_integer()}
           | {:prefix_output?, boolean()}
           | {:timeout, timeout()}
+  @type stage :: %{
+          optional(atom()) => term(),
+          :commands => [command()],
+          :max_concurrency => pos_integer()
+        }
+  @type stage_option ::
+          {:announce?, boolean()}
+          | {:prefix_output?, boolean()}
+          | {:timeout, timeout()}
 
   @doc """
   Builds a `%Blitz.Command{}` from a keyword list or map.
@@ -40,5 +49,33 @@ defmodule Blitz do
   @spec run!([command()], [run_option()]) :: [Blitz.Result.t()]
   def run!(commands, opts \\ []) do
     Runner.run!(commands, opts)
+  end
+
+  @doc """
+  Runs staged commands as per-id pipelines without barriers between stages.
+
+  Each stage bounds its own commands with its `:max_concurrency`. A command in
+  a later stage starts as soon as every same-id command in earlier stages has
+  succeeded — it does not wait for the rest of the earlier stage. A failed
+  command permanently blocks same-id commands in later stages, and no new
+  commands launch after the first failure; in-flight commands finish and are
+  reported.
+
+  Returns `{:ok, results_per_stage}` when every launched command succeeds, or
+  `{:error, error, results_per_stage}` where `results_per_stage` contains only
+  the commands that actually ran.
+  """
+  @spec run_stages([stage()], [stage_option()]) ::
+          {:ok, [[Blitz.Result.t()]]} | {:error, Blitz.Error.t(), [[Blitz.Result.t()]]}
+  def run_stages(stages, opts \\ []) do
+    Runner.run_stages(stages, opts)
+  end
+
+  @doc """
+  Runs staged commands as per-id pipelines and raises if any command fails.
+  """
+  @spec run_stages!([stage()], [stage_option()]) :: [[Blitz.Result.t()]]
+  def run_stages!(stages, opts \\ []) do
+    Runner.run_stages!(stages, opts)
   end
 end

@@ -30,9 +30,13 @@ workflow engine, or distributed scheduler.
 - Raises with actionable aggregated failure details in `run!/2`
 - Distinguishes normal exits, startup errors, timeouts, and worker crashes
 - Accepts per-command working directories and environment overrides
+- Runs staged commands as per-id pipelines with `Blitz.run_stages/2` — no
+  barriers between stages
 - Ships a reusable `Blitz.MixWorkspace` layer for Mix monorepos
 - Supports config-driven parallelism with task weights, auto machine scaling,
   optional pinned multipliers, and per-task overrides
+- Rejects unknown workspace configuration keys instead of silently ignoring
+  them
 - Keeps child projects isolated with per-project deps/build/lockfile/Hex paths
 - Persists impact-aware task state so unchanged exact states can be skipped
 - Plans workspace CI from git changes, project fingerprints, dependency state,
@@ -51,7 +55,7 @@ Default install:
 ```elixir
 def deps do
   [
-    {:blitz, "~> 0.3.0"}
+    {:blitz, "~> 0.4.0"}
   ]
 end
 ```
@@ -64,7 +68,7 @@ helpers:
 ```elixir
 def deps do
   [
-    {:blitz, "~> 0.3.0", runtime: false}
+    {:blitz, "~> 0.4.0", runtime: false}
   ]
 end
 ```
@@ -104,7 +108,7 @@ Example:
 def project do
   [
     app: :my_workspace,
-    version: "0.3.0",
+    version: "0.4.0",
     deps: deps(),
     dialyzer: dialyzer()
   ]
@@ -112,7 +116,7 @@ end
 
 defp deps do
   [
-    {:blitz, "~> 0.3.0", runtime: false}
+    {:blitz, "~> 0.4.0", runtime: false}
   ]
 end
 
@@ -151,6 +155,24 @@ Blitz.run!(commands, max_concurrency: 2)
 Each command streams output with a stable `id | ...` prefix and `run!/2` raises
 with an actionable failure summary if any command fails.
 
+For multi-stage work, `Blitz.run_stages/2` and `Blitz.run_stages!/2` run each
+stage's commands under that stage's `max_concurrency` without a barrier between
+stages: a command in a later stage starts as soon as every same-id command in
+earlier stages has succeeded, even while other ids are still on earlier stages.
+
+```elixir
+stages = [
+  %{commands: compile_commands, max_concurrency: 4},
+  %{commands: test_commands, max_concurrency: 4}
+]
+
+Blitz.run_stages!(stages)
+```
+
+A failed command permanently blocks same-id commands in later stages, and no
+new commands launch after the first failure; in-flight commands finish and are
+reported.
+
 ## Mix Workspaces
 
 `Blitz.MixWorkspace` moves the common Mix-monorepo concerns out of repo-local
@@ -162,6 +184,8 @@ wrapper code:
 - isolated `MIX_DEPS_PATH`, `MIX_BUILD_PATH`, `MIX_LOCKFILE`, and `HEX_HOME`
 - task-specific env hooks
 - configurable parallelism per task family
+- barrier-free staging: a project's task starts as soon as that project's
+  preflight finished, even while other projects are still fetching deps
 
 Configure it in your root `mix.exs`:
 
@@ -169,7 +193,7 @@ Configure it in your root `mix.exs`:
 def project do
   [
     app: :my_workspace,
-    version: "0.3.0",
+    version: "0.4.0",
     deps: deps(),
     aliases: aliases(),
     blitz_workspace: blitz_workspace()
@@ -219,7 +243,7 @@ output such as the normal ExUnit colors from `mix test`.
 For tooling-root workspaces, the most common dependency shape is:
 
 ```elixir
-{:blitz, "~> 0.3.0", runtime: false}
+{:blitz, "~> 0.4.0", runtime: false}
 ```
 
 If that project also keeps a narrow Dialyzer PLT, add `:blitz` to
@@ -426,6 +450,10 @@ Workspace config keys:
   can run.
 - `parallelism` configures computed concurrency per task family.
 - `isolation` controls which child-project paths and env vars are isolated.
+
+Unknown keys in `blitz_workspace`, `parallelism`, `isolation`, or a task config
+raise a configuration error that lists the supported keys, so a misspelled key
+cannot silently degrade the workspace (for example to concurrency `1`).
 
 Task config keys:
 
