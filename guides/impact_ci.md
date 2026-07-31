@@ -27,9 +27,12 @@ snapshot, and writes a clean baseline plus a clean-pipeline manifest after a
 successful clean run. Execution is pipelined per project rather than
 barriered per task family: a project's `test` command can start as soon as
 that project's `compile` succeeded, while other projects are still
-compiling. Each task family still respects its own configured concurrency. A later identical clean run can skip from that manifest
-before project fingerprinting, which is the fastest path for repeated `mix ci`
-checks. Dirty runs use the clean baseline to skip unimpacted project/task pairs.
+compiling. Each task family still respects its own configured concurrency. A
+later identical clean run can skip from that manifest before project
+fingerprinting, which is the fastest path for repeated `mix ci` checks. Dirty
+runs use the clean baseline to skip unimpacted project/task pairs. The
+aggregate in-flight command count never exceeds the largest effective
+task-family limit, so a pipeline configured with `-j 1` is fully serial.
 
 ## Commands
 

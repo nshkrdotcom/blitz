@@ -168,18 +168,19 @@ defmodule Blitz.MixWorkspaceTest do
     end)
   end
 
-  test "explicit workspace max_concurrency applies before task defaults" do
+  test "workspace max_concurrency is a ceiling and default for task-specific limits" do
     workspace =
       workspace_config("/tmp/workspace",
         parallelism: [
           max_concurrency: 5,
-          base: [deps_get: 3, test: 2],
+          base: [deps_get: 3, test: 2, credo: 2],
           multiplier: 2,
-          overrides: [test: 9]
+          overrides: [test: 9, credo: 1]
         ]
       )
 
     assert MixWorkspace.max_concurrency(workspace, :test) == 5
+    assert MixWorkspace.max_concurrency(workspace, :credo) == 1
     assert MixWorkspace.max_concurrency(workspace, :test, 7) == 7
   end
 

@@ -54,12 +54,13 @@ defmodule Blitz do
   @doc """
   Runs staged commands as per-id pipelines without barriers between stages.
 
-  Each stage bounds its own commands with its `:max_concurrency`. A command in
-  a later stage starts as soon as every same-id command in earlier stages has
-  succeeded — it does not wait for the rest of the earlier stage. A failed
-  command permanently blocks same-id commands in later stages, and no new
-  commands launch after the first failure; in-flight commands finish and are
-  reported.
+  Each stage bounds its own commands with its `:max_concurrency`, and total
+  in-flight commands across all stages never exceed the largest stage
+  `:max_concurrency`. A command in a later stage starts as soon as every
+  same-id command in earlier stages has succeeded — it does not wait for the
+  rest of the earlier stage. A failed command permanently blocks same-id
+  commands in later stages, and no new commands launch after the first
+  failure; in-flight commands finish and are reported.
 
   Returns `{:ok, results_per_stage}` when every launched command succeeds, or
   `{:error, error, results_per_stage}` where `results_per_stage` contains only

@@ -9,16 +9,18 @@ defmodule Blitz.MixWorkspace do
   forming barriers, so one project's task can start while other projects are
   still on an earlier stage.
 
-  Parallelism stays workspace-owned. Effective concurrency for a task resolves
-  in this order (first present value wins):
+  Parallelism stays workspace-owned:
 
-  1. the CLI runner override (`-j`/`--max-concurrency`)
-  2. `max_concurrency`, which explicitly pins all workspace tasks
-  3. the per-task value in `overrides`
-  4. `round(base * multiplier)`, where `base` describes task weight and
-     `multiplier` describes machine size (`:auto` scales from local schedulers
-     and memory)
-  5. `1` when nothing is configured for the task
+  1. A CLI runner override (`-j`/`--max-concurrency`) explicitly pins every
+     stage and the aggregate pipeline limit.
+  2. Otherwise, a per-task value in `overrides` or
+     `round(base * multiplier)` supplies that stage's limit.
+  3. `parallelism.max_concurrency` bounds a task-specific limit and supplies
+     the default for tasks without one.
+  4. A task with no CLI, task-specific, or workspace limit falls back to `1`.
+
+  Pipelined stages may overlap, but their aggregate in-flight command count
+  never exceeds the largest effective stage limit.
   """
 
   alias Blitz.Command
@@ -148,8 +150,7 @@ defmodule Blitz.MixWorkspace do
   def max_concurrency(workspace_config, task, runner_override \\ nil) do
     workspace = normalize_workspace!(workspace_config)
 
-    runner_override || workspace_max_concurrency(workspace) ||
-      configured_concurrency(workspace, task)
+    runner_override || configured_concurrency(workspace, task)
   end
 
   @doc """
@@ -623,18 +624,26 @@ defmodule Blitz.MixWorkspace do
   end
 
   defp configured_concurrency(workspace, task) do
-    case Map.fetch(workspace.parallelism.overrides, task) do
-      {:ok, value} ->
-        value
+    task_concurrency =
+      case Map.fetch(workspace.parallelism.overrides, task) do
+        {:ok, value} ->
+          value
 
-      :error ->
-        case Map.fetch(workspace.parallelism.base, task) do
-          {:ok, base} ->
-            max(1, round(base * resolve_multiplier(workspace.parallelism.multiplier)))
+        :error ->
+          case Map.fetch(workspace.parallelism.base, task) do
+            {:ok, base} ->
+              max(1, round(base * resolve_multiplier(workspace.parallelism.multiplier)))
 
-          :error ->
-            1
-        end
+            :error ->
+              nil
+          end
+      end
+
+    case {workspace_max_concurrency(workspace), task_concurrency} do
+      {nil, nil} -> 1
+      {max_concurrency, nil} -> max_concurrency
+      {nil, task_concurrency} -> task_concurrency
+      {max_concurrency, task_concurrency} -> min(max_concurrency, task_concurrency)
     end
   end
 

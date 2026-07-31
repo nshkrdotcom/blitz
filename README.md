@@ -55,7 +55,7 @@ Default install:
 ```elixir
 def deps do
   [
-    {:blitz, "~> 0.4.0"}
+    {:blitz, "~> 0.4.1"}
   ]
 end
 ```
@@ -68,7 +68,7 @@ helpers:
 ```elixir
 def deps do
   [
-    {:blitz, "~> 0.4.0", runtime: false}
+    {:blitz, "~> 0.4.1", runtime: false}
   ]
 end
 ```
@@ -108,7 +108,7 @@ Example:
 def project do
   [
     app: :my_workspace,
-    version: "0.4.0",
+    version: "0.4.1",
     deps: deps(),
     dialyzer: dialyzer()
   ]
@@ -116,7 +116,7 @@ end
 
 defp deps do
   [
-    {:blitz, "~> 0.4.0", runtime: false}
+    {:blitz, "~> 0.4.1", runtime: false}
   ]
 end
 
@@ -159,6 +159,8 @@ For multi-stage work, `Blitz.run_stages/2` and `Blitz.run_stages!/2` run each
 stage's commands under that stage's `max_concurrency` without a barrier between
 stages: a command in a later stage starts as soon as every same-id command in
 earlier stages has succeeded, even while other ids are still on earlier stages.
+The aggregate in-flight count is also bounded by the largest stage
+`max_concurrency`, so stages with a limit of `1` are globally serial.
 
 ```elixir
 stages = [
@@ -193,7 +195,7 @@ Configure it in your root `mix.exs`:
 def project do
   [
     app: :my_workspace,
-    version: "0.4.0",
+    version: "0.4.1",
     deps: deps(),
     aliases: aliases(),
     blitz_workspace: blitz_workspace()
@@ -243,7 +245,7 @@ output such as the normal ExUnit colors from `mix test`.
 For tooling-root workspaces, the most common dependency shape is:
 
 ```elixir
-{:blitz, "~> 0.4.0", runtime: false}
+{:blitz, "~> 0.4.1", runtime: false}
 ```
 
 If that project also keeps a narrow Dialyzer PLT, add `:blitz` to
@@ -321,15 +323,19 @@ The intended model is:
 
 If you omit `multiplier`, `Blitz` defaults to `:auto`.
 
-Each workspace task gets one effective `max_concurrency` value. Resolution
-order is:
+Each workspace task gets one effective `max_concurrency` value:
 
-1. `-j N` or `--max-concurrency N` on the current invocation
-2. the explicit workspace override from `parallelism.max_concurrency`
-3. the per-task value in `parallelism.overrides`
-4. `round(base * resolved_multiplier)` from `parallelism.base` and
-   `parallelism.multiplier`
-5. fallback `1` if the task has no configured base count
+1. `-j N` or `--max-concurrency N` explicitly pins every stage to `N`.
+2. Otherwise, `parallelism.overrides[task]` or
+   `round(parallelism.base[task] * resolved_multiplier)` supplies the
+   task-specific limit.
+3. `parallelism.max_concurrency` bounds that task-specific value and supplies
+   the default for a task without one.
+4. A task with no configured limit falls back to `1`.
+
+Across a pipelined run, the largest effective stage limit is also the aggregate
+in-flight command limit. Thus `-j 1` is genuinely serial even though later
+stages are eligible to start without a barrier.
 
 The formula is:
 
@@ -337,12 +343,18 @@ The formula is:
 resolved_multiplier =
   multiplier == :auto ? autodetect_multiplier() : multiplier
 
+task_limit =
+  per_task_override
+  || round(base[task] * resolved_multiplier)
+
 effective(task) =
   cli_override
+  || min_if_both_present(workspace_max_concurrency, task_limit)
   || workspace_max_concurrency
-  || per_task_override
-  || round(base[task] * resolved_multiplier)
+  || task_limit
   || 1
+
+aggregate_limit = max(effective(stage.task) for stage in planned_stages)
 ```
 
 `autodetect_multiplier()` uses the lower of a CPU class and a memory class:
@@ -390,8 +402,9 @@ docs     = 2
 Then:
 
 - `mix blitz.workspace test` uses `4`
-- `parallelism.max_concurrency: 10` uses `10`
-- `mix blitz.workspace test -j 12` uses `12`
+- `parallelism.max_concurrency: 3` bounds the test task at `3`
+- `parallelism.max_concurrency: 10` leaves the task-specific value at `4`
+- `mix blitz.workspace test -j 12` explicitly uses `12`
 
 Example with auto mode:
 
@@ -538,9 +551,9 @@ blitz_workspace: [
 ]
 ```
 
-To pin workspace concurrency without changing task weights, set
-`parallelism.max_concurrency` or pass `-j`/`--max-concurrency` on the command
-line:
+To set a workspace ceiling and a default for tasks without weights, configure
+`parallelism.max_concurrency`. To explicitly pin every stage for one
+invocation, pass `-j`/`--max-concurrency`:
 
 ```elixir
 parallelism: [

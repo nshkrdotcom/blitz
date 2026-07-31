@@ -53,8 +53,8 @@ defmodule Blitz.Runner do
   @spec run_stages([Blitz.stage()], [option()]) ::
           {:ok, [[Result.t()]]} | {:error, Error.t(), [[Result.t()]]}
   def run_stages(stages, opts \\ []) do
-    options = normalize_stage_options(opts)
     stage_specs = normalize_stages!(stages)
+    options = normalize_stage_options(opts, stage_specs)
     items = stage_items(stage_specs)
     output_tail_table = :ets.new(__MODULE__, [:set, :public])
     started_at_table = :ets.new(__MODULE__, [:set, :public])
@@ -104,9 +104,13 @@ defmodule Blitz.Runner do
     end
   end
 
-  defp normalize_stage_options(opts) do
+  defp normalize_stage_options(opts, stage_specs) do
     %{
       announce?: Keyword.get(opts, :announce?, true),
+      max_concurrency:
+        stage_specs
+        |> Enum.map(& &1.max_concurrency)
+        |> Enum.max(fn -> System.schedulers_online() end),
       prefix_output?: Keyword.get(opts, :prefix_output?, true),
       timeout: Keyword.get(opts, :timeout, :infinity)
     }
@@ -184,8 +188,13 @@ defmodule Blitz.Runner do
   end
 
   defp launch_if_capacity(state, item, kept) do
-    if Map.get(state.running_counts, item.stage_index, 0) <
-         Map.fetch!(state.caps, item.stage_index) do
+    stage_available? =
+      Map.get(state.running_counts, item.stage_index, 0) <
+        Map.fetch!(state.caps, item.stage_index)
+
+    aggregate_available? = map_size(state.running) < state.options.max_concurrency
+
+    if stage_available? and aggregate_available? do
       {launch_item(state, item), kept}
     else
       {state, [item | kept]}

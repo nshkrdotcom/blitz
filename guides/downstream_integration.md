@@ -15,7 +15,7 @@ end
 After the Blitz release is published, switch back to the Hex dependency:
 
 ```elixir
-{:blitz, "~> 0.4.0", runtime: false}
+{:blitz, "~> 0.4.1", runtime: false}
 ```
 
 ## Repo-Local `mix ci`
@@ -103,6 +103,8 @@ For a downstream target:
 - Unlocked Git dependencies without matching `mix.lock` entries do not produce
   reusable deterministic skip evidence.
 - `mix ci --force` selects all planned commands.
+- `mix ci -j 1` never overlaps commands across task stages; larger limits
+  preserve pipelining while bounding the aggregate in-flight count.
 - `.blitz/test_state_v1` does not contain stale `results.ndjson`,
   `commits/`, or `output/` artifacts in the default compact retention mode.
 

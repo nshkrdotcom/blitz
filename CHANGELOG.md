@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-07-30
+
+### Fixed
+- Fixed staged execution so the aggregate in-flight command count never
+  exceeds the largest stage `max_concurrency`. In 0.4.0, each stage enforced
+  its limit independently, so pipelined stages could exceed `-j N` in
+  aggregate and `-j 1` was not actually serial.
+- Fixed `parallelism.overrides` so a task-specific value can lower
+  `parallelism.max_concurrency`. The workspace value is now a ceiling and the
+  default for tasks without a task-specific limit; explicit CLI `-j` remains
+  the highest-precedence pin.
+
 ## [0.4.0] - 2026-07-30
 
 ### Added

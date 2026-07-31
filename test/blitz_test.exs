@@ -175,7 +175,7 @@ defmodule BlitzTest do
             ],
             max_concurrency: 1
           },
-          %{commands: [stamped_command("a", dir, "a2", "0")], max_concurrency: 1}
+          %{commands: [stamped_command("a", dir, "a2", "0.3")], max_concurrency: 2}
         ]
 
         capture_io(fn ->
@@ -186,6 +186,35 @@ defmodule BlitzTest do
         second_start = max(stamp(dir, "a1", :start), stamp(dir, "b1", :start))
 
         assert second_start >= first_end
+
+        assert intervals_overlap?(
+                 {stamp(dir, "b1", :start), stamp(dir, "b1", :end)},
+                 {stamp(dir, "a2", :start), stamp(dir, "a2", :end)}
+               )
+      end)
+    end
+
+    test "enforces one aggregate concurrency bound across overlapping stages" do
+      with_stamp_dir(fn dir ->
+        stages = [
+          %{
+            commands: [
+              stamped_command("a", dir, "a1", "0.3"),
+              stamped_command("b", dir, "b1", "0.3")
+            ],
+            max_concurrency: 1
+          },
+          %{commands: [stamped_command("a", dir, "a2", "0.3")], max_concurrency: 1}
+        ]
+
+        capture_io(fn ->
+          assert {:ok, _results} = Blitz.run_stages(stages)
+        end)
+
+        b1_interval = {stamp(dir, "b1", :start), stamp(dir, "b1", :end)}
+        a2_interval = {stamp(dir, "a2", :start), stamp(dir, "a2", :end)}
+
+        refute intervals_overlap?(b1_interval, a2_interval)
       end)
     end
 
@@ -291,6 +320,10 @@ defmodule BlitzTest do
     |> File.read!()
     |> String.trim()
     |> String.to_integer()
+  end
+
+  defp intervals_overlap?({left_start, left_end}, {right_start, right_end}) do
+    left_start < right_end and right_start < left_end
   end
 
   defp with_stamp_dir(fun) do
