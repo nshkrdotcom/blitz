@@ -42,47 +42,31 @@ defmodule Blitz.TestState.FileFingerprint do
   end
 
   @spec project_files(String.t(), String.t()) :: [String.t()]
-  def project_files(root, ".") do
-    case Git.repo_files(root) do
+  def project_files(root, project_path) do
+    project_root = project_root(root, project_path)
+
+    case Git.repo_files(project_root) do
       {:ok, files} ->
         files
-        |> Enum.reject(&(nested_project_file?(root, &1) or excluded?(&1)))
+        |> Enum.reject(&(nested_project_file?(project_root, &1) or excluded?(&1)))
         |> Enum.sort()
 
       :unknown ->
-        root
+        project_root
         |> all_files()
-        |> Enum.map(&Path.relative_to(&1, root))
-        |> Enum.reject(&(nested_project_file?(root, &1) or excluded?(&1)))
+        |> Enum.map(&Path.relative_to(&1, project_root))
+        |> Enum.reject(&(nested_project_file?(project_root, &1) or excluded?(&1)))
         |> Enum.sort()
     end
-  end
-
-  def project_files(root, project_path) do
-    prefix = project_path <> "/"
-
-    files =
-      case Git.repo_files(root) do
-        {:ok, repo_files} ->
-          repo_files
-
-        :unknown ->
-          root
-          |> all_files()
-          |> Enum.map(&Path.relative_to(&1, root))
-      end
-
-    files
-    |> Enum.filter(&(String.starts_with?(&1, prefix) or &1 == project_path))
-    |> Enum.map(&String.replace_prefix(&1, prefix, ""))
-    |> Enum.reject(&(&1 == project_path or &1 == "" or excluded?(&1)))
-    |> Enum.sort()
   end
 
   defp single_file_hash(project_root, file), do: hash_files(project_root, [file], file)
 
   defp project_root(root, "."), do: root
-  defp project_root(root, project_path), do: Path.join(root, project_path)
+
+  defp project_root(root, project_path) do
+    if Path.type(project_path) == :absolute, do: project_path, else: Path.join(root, project_path)
+  end
 
   defp hash_filtered_files(files, root, label), do: hash_files(root, files, label)
 

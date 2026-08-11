@@ -220,6 +220,36 @@ defmodule Blitz.TestStateTest do
     end)
   end
 
+  test "sibling repository source changes alter external project task hashes" do
+    with_tmp_workspace(fn root ->
+      sibling_root = root <> "_sibling"
+
+      try do
+        create_mix_project!(root, ".")
+        create_mix_project!(sibling_root, ".")
+        init_git!(root)
+        init_git!(sibling_root)
+
+        workspace =
+          root
+          |> workspace_config()
+          |> Keyword.put(:projects, [".", sibling_root])
+
+        compile_before = task_state_hash(workspace, :compile, sibling_root)
+
+        File.write!(Path.join(sibling_root, "lib/root.ex"), """
+        defmodule Root do
+          def ok?, do: :changed
+        end
+        """)
+
+        refute task_state_hash(workspace, :compile, sibling_root) == compile_before
+      after
+        File.rm_rf!(sibling_root)
+      end
+    end)
+  end
+
   test "run_many writes a clean commit manifest and skips the next identical clean pipeline before mapping commands" do
     with_tmp_workspace(fn root ->
       create_mix_project!(root, ".")

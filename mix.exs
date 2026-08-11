@@ -11,8 +11,6 @@ end
 defmodule Blitz.MixProject do
   use Mix.Project
 
-  @workspace_checkout? File.regular?(Path.expand("build_support/dependency_sources.exs", __DIR__))
-
   def project do
     [
       app: :blitz,
@@ -44,18 +42,6 @@ defmodule Blitz.MixProject do
       {:dialyxir, "~> 1.4.7", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.40.3", only: :dev, runtime: false}
     ]
-  end
-
-
-  # In a source checkout the registry decides the source (path first). In a
-  # published package there is no registry, and the requirement stated here is
-  # the whole answer.
-  defp workspace_dep(app, hex_requirement, opts \\ []) do
-    if @workspace_checkout? do
-      apply(DependencySources, :dep, [app, __DIR__, opts])
-    else
-      if opts == [], do: {app, hex_requirement}, else: {app, hex_requirement, opts}
-    end
   end
 
   defp package do

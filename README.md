@@ -458,7 +458,8 @@ Workspace config keys:
 
 - `root` sets the workspace root. It defaults to the current directory.
 - `projects` is an ordered list of literal paths and glob patterns. Only entries
-  containing a `mix.exs` file are included.
+  containing a `mix.exs` file are included. Paths outside `root` are supported
+  and use their expanded absolute path as the stable project id.
 - `tasks` defines the named workspace tasks that `mix blitz.workspace <task>`
   can run.
 - `parallelism` configures computed concurrency per task family.

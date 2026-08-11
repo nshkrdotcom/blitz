@@ -255,7 +255,10 @@ defmodule Blitz.MixWorkspace.DependencyState do
   end
 
   defp project_root(root, "."), do: root
-  defp project_root(root, project_path), do: Path.join(root, project_path)
+
+  defp project_root(root, project_path) do
+    if Path.type(project_path) == :absolute, do: project_path, else: Path.join(root, project_path)
+  end
 
   defp git_ref(opts) do
     [:ref, :branch, :tag]

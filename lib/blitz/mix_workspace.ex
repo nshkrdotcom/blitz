@@ -474,12 +474,17 @@ defmodule Blitz.MixWorkspace do
   defp normalize_multiplier!(value, name), do: normalize_positive_number!(value, name)
 
   defp project_root(workspace, "."), do: workspace.root
-  defp project_root(workspace, project_path), do: Path.join(workspace.root, project_path)
+
+  defp project_root(workspace, project_path) do
+    if Path.type(project_path) == :absolute,
+      do: project_path,
+      else: Path.join(workspace.root, project_path)
+  end
 
   defp expand_project_spec(root, project_spec) do
     if glob?(project_spec) do
-      root
-      |> Path.join(project_spec)
+      project_spec
+      |> expand_project_spec_path(root)
       |> Path.wildcard()
       |> Enum.filter(&File.regular?(Path.join(&1, "mix.exs")))
       |> Enum.sort()
@@ -493,6 +498,12 @@ defmodule Blitz.MixWorkspace do
         []
       end
     end
+  end
+
+  defp expand_project_spec_path(project_spec, root) do
+    if Path.type(project_spec) == :absolute,
+      do: project_spec,
+      else: Path.join(root, project_spec)
   end
 
   defp glob?(project_spec) do

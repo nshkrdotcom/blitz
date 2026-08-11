@@ -38,6 +38,34 @@ defmodule Blitz.MixWorkspaceTest do
     end)
   end
 
+  test "discovers and plans a project outside the workspace root" do
+    with_tmp_workspace(fn root ->
+      external_root = root <> "_external"
+      sibling_root = Path.join(external_root, "sibling")
+
+      try do
+        create_mix_project!(root, ".")
+        create_mix_project!(sibling_root, ".")
+
+        workspace = workspace_config(root, projects: [".", Path.join(external_root, "*")])
+
+        assert MixWorkspace.project_paths(workspace) == [".", sibling_root]
+
+        external_command =
+          workspace
+          |> MixWorkspace.plan(:compile, [])
+          |> List.last()
+          |> Map.fetch!(:commands)
+          |> Enum.find(&(&1.id == sibling_root))
+
+        assert external_command.cd == sibling_root
+        assert Map.new(external_command.env)["MIX_DEPS_PATH"] == Path.join(sibling_root, "deps")
+      after
+        File.rm_rf!(external_root)
+      end
+    end)
+  end
+
   test "builds task args with color support and respects explicit color flags" do
     workspace = workspace_config("/tmp/workspace")
 
