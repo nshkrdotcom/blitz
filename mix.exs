@@ -1,13 +1,3 @@
-# `build_support/` is not shipped in the published package, so its absence is
-# how this file knows it is running inside a consumer's deps/ rather than in a
-# source checkout. Guard on the file, not on a directory shape: a shape test
-# breaks when the repo is vendored at a different depth or used as a git dep.
-workspace_helper = Path.expand("build_support/dependency_sources.exs", __DIR__)
-
-if File.regular?(workspace_helper) and not Code.ensure_loaded?(DependencySources) do
-  Code.require_file(workspace_helper)
-end
-
 defmodule Blitz.MixProject do
   use Mix.Project
 

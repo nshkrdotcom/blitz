@@ -100,11 +100,13 @@ dependency declaration state instead, so it stays skipped for source-only edits
 and reruns when `mix.exs` or dependency declarations change.
 
 Workspace invalidators are treated conservatively. By default, root `mix.exs`,
-`build_support/dependency_resolver.exs`, and
+`.mix_workspace_ops/sources.tsv`, `build_support/dependency_resolver.exs`, and
 `build_support/workspace_contract.exs` select every configured project/task when
 changed. These files are also fingerprinted into the workspace task state, so a
 previously passed exact state cannot hide a changed resolver or workspace
-contract.
+contract. The operator overlay also participates in the clean-pipeline hash, so
+switching between local, pinned-Git, and ordinary Hex sources cannot reuse a
+pipeline result from a different source selection.
 
 ## Seven-Stage CI
 

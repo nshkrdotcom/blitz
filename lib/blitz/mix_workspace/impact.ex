@@ -340,6 +340,7 @@ defmodule Blitz.MixWorkspace.Impact do
       repo_commit: git.commit,
       repo_tree: git.tree,
       workspace: workspace,
+      operator_source_state: operator_source_state(workspace.root),
       task_specs: task_specs,
       opts: Keyword.drop(opts, [:dry_run, :force, :store_dir]),
       elixir: System.version(),
@@ -555,6 +556,7 @@ defmodule Blitz.MixWorkspace.Impact do
   defp workspace_invalidator_files(impact_policy) do
     [
       "mix.exs",
+      ".mix_workspace_ops/sources.tsv",
       "build_support/dependency_resolver.exs",
       "build_support/workspace_contract.exs"
     ]
@@ -562,6 +564,16 @@ defmodule Blitz.MixWorkspace.Impact do
     |> Enum.map(&to_string/1)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  defp operator_source_state(root) do
+    path = Path.join(root, ".mix_workspace_ops/sources.tsv")
+
+    case File.read(path) do
+      {:ok, contents} -> %{status: "present", hash: Hash.hash("operator_source", contents)}
+      {:error, :enoent} -> %{status: "missing"}
+      {:error, reason} -> %{status: "error", reason: inspect(reason)}
+    end
   end
 
   defp workspace_invalidator_state(root, impact_policy) do

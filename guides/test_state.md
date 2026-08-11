@@ -95,7 +95,7 @@ baseline, and `run_many!` also prunes task-state indexes down to the current
 pipeline surface. You can run the cleanup manually:
 
 Workspace invalidator files are part of the workspace state fingerprint. The
-default invalidators are root `mix.exs`,
+default invalidators are root `mix.exs`, `.mix_workspace_ops/sources.tsv`,
 `build_support/dependency_resolver.exs`, and
 `build_support/workspace_contract.exs`, plus any downstream paths provided in
 `:workspace_invalidators`. If one of these files changes, old exact task-state

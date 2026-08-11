@@ -250,6 +250,34 @@ defmodule Blitz.TestStateTest do
     end)
   end
 
+  test "operator source overlay changes invalidate dependency-sensitive task state" do
+    with_tmp_workspace(fn root ->
+      create_mix_project!(root, ".")
+      create_mix_project!(root, "apps/demo")
+      File.write!(Path.join(root, ".gitignore"), ".mix_workspace_ops/\n")
+      init_git!(root)
+      workspace = workspace_config(root)
+      before = task_state_hash(workspace, :compile, "apps/demo")
+      overlay = Path.join(root, ".mix_workspace_ops/sources.tsv")
+      File.mkdir_p!(Path.dirname(overlay))
+
+      File.write!(
+        overlay,
+        "mix_workspace_ops\t1\ncatalog_digest\tone\ntarget\tdemo\nmode\tlocal\n"
+      )
+
+      local = task_state_hash(workspace, :compile, "apps/demo")
+      refute local == before
+
+      File.write!(
+        overlay,
+        "mix_workspace_ops\t1\ncatalog_digest\ttwo\ntarget\tdemo\nmode\tgit\n"
+      )
+
+      refute task_state_hash(workspace, :compile, "apps/demo") == local
+    end)
+  end
+
   test "run_many writes a clean commit manifest and skips the next identical clean pipeline before mapping commands" do
     with_tmp_workspace(fn root ->
       create_mix_project!(root, ".")

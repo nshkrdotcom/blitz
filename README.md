@@ -91,6 +91,18 @@ test-only flow. If your project uses `blitz` for root tooling, `runtime: false`
 is usually the right default. Add `only: ...` only when you are certain the
 dependency is never needed outside those environments.
 
+### Local Workspace Sources
+
+Blitz keeps ordinary Hex requirements in each consuming `mix.exs`. For explicit
+multi-repository development, run it through the non-Hex `mix_workspace_ops`
+operator tool. The generated `.mix_workspace_ops/sources.tsv` overlay is local,
+ignored, and fingerprinted by impact CI; changing between local, pinned-Git, and
+Hex sources therefore invalidates earlier task and clean-pipeline evidence.
+
+Blitz itself does not select dependency sources and does not require Mix
+Workspace Ops at runtime. With no overlay present, it remains a standalone Hex
+library.
+
 ### Dialyzer Note For Tooling-Only Installs
 
 If you install `blitz` with `runtime: false` and your project keeps a narrow
