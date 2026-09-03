@@ -13,6 +13,7 @@ defmodule Blitz do
   @type command :: Command.t()
   @type run_option ::
           {:announce?, boolean()}
+          | {:emit_output?, boolean()}
           | {:max_concurrency, pos_integer()}
           | {:prefix_output?, boolean()}
           | {:timeout, timeout()}
@@ -23,6 +24,7 @@ defmodule Blitz do
         }
   @type stage_option ::
           {:announce?, boolean()}
+          | {:emit_output?, boolean()}
           | {:prefix_output?, boolean()}
           | {:timeout, timeout()}
 

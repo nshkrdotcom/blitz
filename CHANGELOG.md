@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.2] - Unreleased
 
+### Added
+- Added `emit_output?: false` to command and staged runs. Child output remains
+  available in bounded result tails without being streamed to the caller, so
+  orchestration layers can produce one concise aggregate report.
+
 ### Fixed
 - Fixed impact fingerprints for workspace projects in sibling repositories.
   Project files are now discovered from each project's own Git worktree, so an

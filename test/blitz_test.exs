@@ -32,6 +32,25 @@ defmodule BlitzTest do
     assert output =~ "fast | fast"
   end
 
+  test "can retain output tails without emitting child output" do
+    command =
+      Command.new(
+        id: "quiet",
+        command: System.find_executable("elixir"),
+        args: ["-e", ~s|IO.puts("retained")|]
+      )
+
+    output =
+      capture_io(fn ->
+        assert {:ok, [result]} =
+                 Blitz.run([command], announce?: false, emit_output?: false)
+
+        assert result.output_tail == ["retained"]
+      end)
+
+    assert output == ""
+  end
+
   test "returns a structured error when commands fail" do
     elixir = System.find_executable("elixir")
     cwd = System.tmp_dir!()

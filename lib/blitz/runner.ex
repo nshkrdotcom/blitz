@@ -5,6 +5,7 @@ defmodule Blitz.Runner do
 
   @type option ::
           {:announce?, boolean()}
+          | {:emit_output?, boolean()}
           | {:max_concurrency, pos_integer()}
           | {:prefix_output?, boolean()}
           | {:timeout, timeout()}
@@ -107,6 +108,7 @@ defmodule Blitz.Runner do
   defp normalize_stage_options(opts, stage_specs) do
     %{
       announce?: Keyword.get(opts, :announce?, true),
+      emit_output?: Keyword.get(opts, :emit_output?, true),
       max_concurrency:
         stage_specs
         |> Enum.map(& &1.max_concurrency)
@@ -325,6 +327,7 @@ defmodule Blitz.Runner do
 
     output_buffer =
       OutputBuffer.new(command.id,
+        emit_output?: options.emit_output?,
         prefix_output?: options.prefix_output?,
         tail_store: output_tail_table,
         tail_store_key: index
@@ -394,6 +397,7 @@ defmodule Blitz.Runner do
 
     %{
       announce?: Keyword.get(opts, :announce?, true),
+      emit_output?: Keyword.get(opts, :emit_output?, true),
       max_concurrency: max_concurrency,
       prefix_output?: Keyword.get(opts, :prefix_output?, true),
       timeout: Keyword.get(opts, :timeout, :infinity)

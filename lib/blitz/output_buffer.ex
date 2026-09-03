@@ -7,6 +7,7 @@ defmodule Blitz.OutputBuffer do
     :id,
     :tail_store,
     :tail_store_key,
+    emit_output?: true,
     prefix_output?: true,
     buffer: "",
     tail_limit: @default_tail_limit,
@@ -15,6 +16,7 @@ defmodule Blitz.OutputBuffer do
 
   @type t :: %__MODULE__{
           id: String.t(),
+          emit_output?: boolean(),
           prefix_output?: boolean(),
           buffer: String.t(),
           tail_limit: pos_integer(),
@@ -27,6 +29,7 @@ defmodule Blitz.OutputBuffer do
   def new(id, opts) do
     state = %__MODULE__{
       id: id,
+      emit_output?: Keyword.get(opts, :emit_output?, true),
       prefix_output?: Keyword.get(opts, :prefix_output?, true),
       tail_limit: Keyword.get(opts, :tail_limit, @default_tail_limit),
       tail_store: Keyword.get(opts, :tail_store),
@@ -116,6 +119,8 @@ defmodule Blitz.OutputBuffer do
     :ets.insert(state.tail_store, {state.tail_store_key, state.tail_lines})
     state
   end
+
+  defp write_line(%__MODULE__{emit_output?: false}, _line), do: :ok
 
   defp write_line(%__MODULE__{id: id, prefix_output?: true}, line) do
     IO.write("#{id} | #{line}\n")
