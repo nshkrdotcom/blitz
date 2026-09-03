@@ -5,6 +5,8 @@ defmodule Blitz.OutputBuffer do
 
   defstruct [
     :id,
+    :output_device,
+    :output_path,
     :tail_store,
     :tail_store_key,
     emit_output?: true,
@@ -16,6 +18,8 @@ defmodule Blitz.OutputBuffer do
 
   @type t :: %__MODULE__{
           id: String.t(),
+          output_device: IO.device() | nil,
+          output_path: String.t() | nil,
           emit_output?: boolean(),
           prefix_output?: boolean(),
           buffer: String.t(),
@@ -27,13 +31,17 @@ defmodule Blitz.OutputBuffer do
 
   @spec new(String.t(), keyword()) :: t()
   def new(id, opts) do
+    output_path = Keyword.get(opts, :output_path)
+
     state = %__MODULE__{
       id: id,
       emit_output?: Keyword.get(opts, :emit_output?, true),
       prefix_output?: Keyword.get(opts, :prefix_output?, true),
       tail_limit: Keyword.get(opts, :tail_limit, @default_tail_limit),
       tail_store: Keyword.get(opts, :tail_store),
-      tail_store_key: Keyword.get(opts, :tail_store_key)
+      tail_store_key: Keyword.get(opts, :tail_store_key),
+      output_path: output_path,
+      output_device: open_output(output_path)
     }
 
     sync_tail_store(state)
@@ -41,8 +49,10 @@ defmodule Blitz.OutputBuffer do
 
   @spec emit(t(), iodata()) :: t()
   def emit(%__MODULE__{} = state, data) do
-    data
-    |> IO.iodata_to_binary()
+    bytes = IO.iodata_to_binary(data)
+    write_output(state, bytes)
+
+    bytes
     |> String.replace("\r\n", "\n")
     |> then(&flush_chunks(state, &1))
   end
@@ -69,12 +79,26 @@ defmodule Blitz.OutputBuffer do
     end
   end
 
+  @spec close(t()) :: t()
+  def close(%__MODULE__{output_device: nil} = state), do: state
+
+  def close(%__MODULE__{output_device: device} = state) do
+    _ = File.close(device)
+    %{state | output_device: nil}
+  end
+
   defimpl Collectable do
     def into(initial) do
       collector = fn
-        state, {:cont, data} -> Blitz.OutputBuffer.emit(state, data)
-        state, :done -> Blitz.OutputBuffer.flush(state)
-        _state, :halt -> :ok
+        state, {:cont, data} ->
+          Blitz.OutputBuffer.emit(state, data)
+
+        state, :done ->
+          state |> Blitz.OutputBuffer.flush() |> Blitz.OutputBuffer.close()
+
+        state, :halt ->
+          Blitz.OutputBuffer.close(state)
+          :ok
       end
 
       {initial, collector}
@@ -119,6 +143,16 @@ defmodule Blitz.OutputBuffer do
     :ets.insert(state.tail_store, {state.tail_store_key, state.tail_lines})
     state
   end
+
+  defp open_output(nil), do: nil
+
+  defp open_output(path) do
+    File.mkdir_p!(Path.dirname(path))
+    File.open!(path, [:write, :binary])
+  end
+
+  defp write_output(%__MODULE__{output_device: nil}, _bytes), do: :ok
+  defp write_output(%__MODULE__{output_device: device}, bytes), do: IO.binwrite(device, bytes)
 
   defp write_line(%__MODULE__{emit_output?: false}, _line), do: :ok
 

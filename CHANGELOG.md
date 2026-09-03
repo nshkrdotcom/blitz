@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `emit_output?: false` to command and staged runs. Child output remains
   available in bounded result tails without being streamed to the caller, so
   orchestration layers can produce one concise aggregate report.
+- Added an optional per-command `output_path` for complete durable combined
+  output while the in-memory result remains bounded to its tail.
 
 ### Fixed
 - Fixed impact fingerprints for workspace projects in sibling repositories.

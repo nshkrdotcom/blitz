@@ -14,6 +14,7 @@ defmodule Blitz.Result do
     :cd,
     :exit_code,
     :duration_ms,
+    :output_path,
     output_tail: [],
     failure_kind: nil,
     failure_reason: nil
@@ -26,6 +27,7 @@ defmodule Blitz.Result do
           cd: String.t() | nil,
           exit_code: non_neg_integer() | nil,
           duration_ms: non_neg_integer(),
+          output_path: String.t() | nil,
           output_tail: [String.t()],
           failure_kind: failure_kind() | nil,
           failure_reason: String.t() | nil
@@ -85,6 +87,7 @@ defmodule Blitz.Result do
       cd: command.cd,
       exit_code: exit_code,
       duration_ms: duration_ms,
+      output_path: command.output_path,
       output_tail: output_tail
     }
   end

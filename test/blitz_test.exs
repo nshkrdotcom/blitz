@@ -51,6 +51,33 @@ defmodule BlitzTest do
     assert output == ""
   end
 
+  test "can retain complete child output in a durable command log" do
+    root = Path.join(System.tmp_dir!(), "blitz-output-#{System.unique_integer([:positive])}")
+    output_path = Path.join(root, "nested/command.log")
+
+    on_exit(fn -> File.rm_rf!(root) end)
+
+    command =
+      Command.new(
+        id: "durable",
+        command: System.find_executable("elixir"),
+        args: ["-e", ~s|IO.puts("stdout"); IO.puts(:stderr, "stderr")|],
+        output_path: output_path
+      )
+
+    emitted =
+      capture_io(fn ->
+        assert {:ok, [result]} =
+                 Blitz.run([command], announce?: false, emit_output?: false)
+
+        assert result.output_path == output_path
+        assert result.output_tail == ["stdout", "stderr"]
+      end)
+
+    assert emitted == ""
+    assert File.read!(output_path) == "stdout\nstderr\n"
+  end
+
   test "returns a structured error when commands fail" do
     elixir = System.find_executable("elixir")
     cwd = System.tmp_dir!()

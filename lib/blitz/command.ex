@@ -4,7 +4,7 @@ defmodule Blitz.Command do
   """
 
   @enforce_keys [:id, :command]
-  defstruct [:id, :command, args: [], cd: nil, env: []]
+  defstruct [:id, :command, :output_path, args: [], cd: nil, env: []]
 
   @type env_value :: String.t() | nil
   @type env_pair :: {String.t(), env_value()}
@@ -14,7 +14,8 @@ defmodule Blitz.Command do
           command: String.t(),
           args: [String.t()],
           cd: String.t() | nil,
-          env: [env_pair()]
+          env: [env_pair()],
+          output_path: String.t() | nil
         }
 
   @doc """
@@ -35,7 +36,8 @@ defmodule Blitz.Command do
       command: attributes |> fetch!(:command) |> to_string(),
       args: attributes |> Map.get(:args, []) |> Enum.map(&to_string/1),
       cd: optional_string(attributes, :cd),
-      env: normalize_env(Map.get(attributes, :env, []))
+      env: normalize_env(Map.get(attributes, :env, [])),
+      output_path: optional_string(attributes, :output_path)
     }
   end
 

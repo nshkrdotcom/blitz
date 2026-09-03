@@ -325,18 +325,29 @@ defmodule Blitz.Runner do
 
     announce_command(command, options)
 
-    output_buffer =
-      OutputBuffer.new(command.id,
-        emit_output?: options.emit_output?,
-        prefix_output?: options.prefix_output?,
-        tail_store: output_tail_table,
-        tail_store_key: index
-      )
-
     result =
-      command
-      |> execute_command(output_buffer)
-      |> build_result(command, started_at)
+      try do
+        output_buffer =
+          OutputBuffer.new(command.id,
+            emit_output?: options.emit_output?,
+            output_path: command.output_path,
+            prefix_output?: options.prefix_output?,
+            tail_store: output_tail_table,
+            tail_store_key: index
+          )
+
+        command
+        |> execute_command(output_buffer)
+        |> build_result(command, started_at)
+      rescue
+        error ->
+          Result.startup_error(
+            command,
+            System.monotonic_time(:millisecond) - started_at,
+            [],
+            Exception.format_banner(:error, error)
+          )
+      end
 
     announce_completion(result, options)
 
@@ -439,6 +450,7 @@ defmodule Blitz.Runner do
         output_buffer
         |> OutputBuffer.emit(message)
         |> OutputBuffer.flush()
+        |> OutputBuffer.close()
 
       {:startup_error, output_buffer, message}
   catch
@@ -449,6 +461,7 @@ defmodule Blitz.Runner do
         output_buffer
         |> OutputBuffer.emit(message)
         |> OutputBuffer.flush()
+        |> OutputBuffer.close()
 
       {:startup_error, output_buffer, message}
   end

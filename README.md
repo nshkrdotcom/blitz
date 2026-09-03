@@ -603,6 +603,8 @@ core/contracts | ...
 - `:args` - optional list of CLI arguments
 - `:cd` - optional working directory
 - `:env` - optional environment overrides as a keyword list or map
+- `:output_path` - optional path that receives the command's complete combined output;
+  parent directories are created and an existing file is replaced
 
 Example with environment overrides:
 
@@ -623,6 +625,8 @@ command =
 
 - `:max_concurrency` - defaults to `System.schedulers_online()`
 - `:announce?` - prints start and completion lines when `true`
+- `:emit_output?` - streams child output when `true`; the bounded tail and any command
+  `:output_path` remain populated when `false`
 - `:prefix_output?` - prefixes command output lines when `true`
 - `:timeout` - per-task timeout passed to `Task.async_stream/3`; timed-out
   tasks are killed and reported as structured timeout failures
